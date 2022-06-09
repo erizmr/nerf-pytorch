@@ -56,7 +56,10 @@ def batchify_rays(rays_flat, chunk=1024*32, **kwargs):
     """
     all_ret = {}
     for i in range(0, rays_flat.shape[0], chunk):
-        ret = render_rays(rays_flat[i:i+chunk], **kwargs)
+        time_total_start = time.time()
+        ret, time_nn = render_rays(rays_flat[i:i+chunk], **kwargs)
+        time_total_end = time.time()
+        print("time network inference ratio ", time_nn / (time_total_end - time_total_start))
         for k in ret:
             if k not in all_ret:
                 all_ret[k] = []
@@ -348,6 +351,7 @@ def render_rays(ray_batch,
       z_std: [num_rays]. Standard deviation of distances along ray for each
         sample.
     """
+
     N_rays = ray_batch.shape[0]
     rays_o, rays_d = ray_batch[:,0:3], ray_batch[:,3:6] # [N_rays, 3] each
     viewdirs = ray_batch[:,-3:] if ray_batch.shape[-1] > 8 else None
@@ -382,8 +386,11 @@ def render_rays(ray_batch,
 
 
 #     raw = run_network(pts)
+    time_nn_start = time.time()
     raw = network_query_fn(pts, viewdirs, network_fn)
     rgb_map, disp_map, acc_map, weights, depth_map = raw2outputs(raw, z_vals, rays_d, raw_noise_std, white_bkgd, pytest=pytest)
+    time_nn_end = time.time()
+    # print("network inference time: ", time_nn_end - time_nn_start)
 
     if N_importance > 0:
 
@@ -415,7 +422,7 @@ def render_rays(ray_batch,
         if (torch.isnan(ret[k]).any() or torch.isinf(ret[k]).any()) and DEBUG:
             print(f"! [Numerical Error] {k} contains nan or inf.")
 
-    return ret
+    return ret, time_nn_end - time_nn_start
 
 
 def config_parser():
